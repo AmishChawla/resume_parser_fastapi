@@ -147,8 +147,7 @@ class UserCompanyResponse(BaseModel):
 
 
 class UserThemeCreate(BaseModel):
-
-    theme_id: int  # New theme_id field
+    theme_id: int
     theme_name: str
     background_image: Optional[str] = None
     background_color: Optional[str] = None

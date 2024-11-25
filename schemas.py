@@ -365,6 +365,7 @@ class UserTheme(Base):
     background_image = Column(String)
     background_color = Column(String)
     header_color = Column(String)
+    logo_image = Column(String)
     site_title = Column(String)
     site_subtitle = Column(String)
     home_link = Column(String)

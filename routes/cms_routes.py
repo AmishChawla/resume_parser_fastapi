@@ -1585,8 +1585,26 @@ def read_page(username: str, slug: str, db: Session = Depends(get_db)):
 
 
 @cms_router.post("/api/user/create_user_theme")
-def create_user_theme(
-        request: models.UserThemeCreate,
+async def create_user_theme(
+        theme_id: int = Form(...),
+        theme_name: str = Form(...),
+        background_image: Optional[str] = Form(None),
+        background_color: Optional[str] = Form(None),
+        header_color: Optional[str] = Form(None),
+        site_title: Optional[str] = Form(None),
+        site_subtitle: Optional[str] = Form(None),
+        home_link: Optional[str] = Form(None),
+        heading: Optional[str] = Form(None),
+        description: Optional[str] = Form(None),
+        footer_heading: Optional[str] = Form(None),
+        footer_items: Optional[List[str]] = Form(None),
+        facebook: Optional[str] = Form(None),
+        twitter: Optional[str] = Form(None),
+        youtube: Optional[str] = Form(None),
+        pinterest: Optional[str] = Form(None),
+        instagram: Optional[str] = Form(None),
+        gmail: Optional[str] = Form(None),
+        logo_image: Optional[UploadFile] = None,
         token: str = Depends(oauth2_scheme),
         db: Session = Depends(get_db)
 ):
@@ -1600,55 +1618,89 @@ def create_user_theme(
 
         # Check if the theme already exists for the user
         existing_theme = db.query(schemas.UserTheme).filter_by(user_id=current_user.id).first()
+        print(logo_image)
+        logo_image_url = None
+        if logo_image:
+            # Save the uploaded logo image
+            logos_dir = os.path.join("templates", "themes", "logos")
+            os.makedirs(logos_dir, exist_ok=True)  # Ensure the directory exists
 
+            # Generate a unique filename
+            logo_filename = f"{current_user.id}_{theme_id}_{logo_image.filename}"
+            logo_path = os.path.join(logos_dir, logo_filename)
+
+            # Write the file to disk
+            with open(logo_path, "wb") as f:
+                f.write(logo_image.file.read())
+
+            # Save the relative URL for the logo image
+            logo_image_url = f"themes/logos/{logo_filename}"
+
+        # If the theme exists, update it
         if existing_theme:
-            # Update the existing theme
-            existing_theme.theme_id = request.theme_id
-            existing_theme.theme_name = request.theme_name
-            existing_theme.background_image = request.background_image
-            existing_theme.background_color = request.background_color
-            existing_theme.header_color = request.header_color
-            existing_theme.site_title = request.site_title
-            existing_theme.site_subtitle = request.site_subtitle
-            existing_theme.home_link = request.home_link
-            existing_theme.heading = request.heading
-            existing_theme.description = request.description
-            existing_theme.footer_heading = request.footer_heading
-            existing_theme.footer_items = ",".join(request.footer_items) if request.footer_items else None
-            existing_theme.facebook = request.facebook
-            existing_theme.twitter = request.twitter
-            existing_theme.youtube = request.youtube
-            existing_theme.pinterest = request.pinterest
-            existing_theme.instagram = request.instagram
-            existing_theme.gmail = request.gmail
+            existing_theme.theme_id = theme_id
+            existing_theme.theme_name = theme_name
+            existing_theme.background_image = background_image
+            existing_theme.background_color = background_color
+            existing_theme.header_color = header_color
+            if site_title:
+                # If site_title is updated, delete any existing logo image starting with the user and theme ID
+                if existing_theme.logo_image:
+                    logo_image_filename = existing_theme.logo_image.split('/')[-1]
+                    if logo_image_filename.startswith(f"{current_user.id}_{theme_id}"):
+                        logo_image_path = os.path.join(logos_dir, logo_image_filename)
+                        if os.path.exists(logo_image_path):
+                            os.remove(logo_image_path)  # Delete the file
+                existing_theme.site_title = site_title
+                existing_theme.logo_image = None
+
+
+            elif logo_image_url:
+                existing_theme.logo_image = logo_image_url
+                existing_theme.site_title = None
+
+            existing_theme.site_subtitle = site_subtitle
+            existing_theme.home_link = home_link
+            existing_theme.heading = heading
+            existing_theme.description = description
+            existing_theme.footer_heading = footer_heading
+            existing_theme.footer_items = ",".join(footer_items) if footer_items else None
+            existing_theme.facebook = facebook
+            existing_theme.twitter = twitter
+            existing_theme.youtube = youtube
+            existing_theme.pinterest = pinterest
+            existing_theme.instagram = instagram
+            existing_theme.gmail = gmail
+
+
 
             db.commit()
             db.refresh(existing_theme)
             return existing_theme
         else:
-            # Create a new theme
+            # If no existing theme, create a new one
             new_theme = schemas.UserTheme(
                 user_id=current_user.id,
-                theme_id=request.theme_id,
-                theme_name=request.theme_name,
-                background_image=request.background_image,
-                background_color=request.background_color,
-                header_color=request.header_color,
-                site_title=request.site_title,
-                site_subtitle=request.site_subtitle,
-                home_link=request.home_link,
-                heading=request.heading,
-                description=request.description,
-                footer_heading=request.footer_heading,
-                footer_items=",".join(request.footer_items) if request.footer_items else None,
-                facebook=request.facebook,
-                twitter=request.twitter,
-                youtube=request.youtube,
-                pinterest=request.pinterest,
-                instagram=request.instagram,
-                gmail=request.gmail
+                theme_id=theme_id,
+                theme_name=theme_name,
+                background_image=background_image,
+                background_color=background_color,
+                header_color=header_color,
+                site_title=site_title,
+                site_subtitle=site_subtitle,
+                home_link=home_link,
+                heading=heading,
+                description=description,
+                footer_heading=footer_heading,
+                footer_items=",".join(footer_items) if footer_items else None,
+                facebook=facebook,
+                twitter=twitter,
+                youtube=youtube,
+                pinterest=pinterest,
+                instagram=instagram,
+                gmail=gmail,
+                logo_image=logo_image_url  # Add the logo_image URL
             )
-            print(site_title)
             db.add(new_theme)
             db.commit()
             db.refresh(new_theme)
@@ -1656,7 +1708,8 @@ def create_user_theme(
 
     except Exception as e:
         db.rollback()  # Rollback the transaction in case of an error
-        raise HTTPException(status_code=500, detail=str(e))
+        print(f"Error: {str(e)}")  # Log the error for debugging
+        raise HTTPException(status_code=500, detail="An error occurred while processing your request.")
 
     finally:
         db.close()  # Ensure the session is closed
@@ -1936,6 +1989,52 @@ def update_menu(
 
     finally:
         db.close()  # Close the session after the transaction
+
+
+@cms_router.delete("/api/menus/delete-menu/{menu_id}")
+def delete_menu(menu_id: int, token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
+    """
+    Delete Menu
+
+    Endpoint: DELETE /api/menus/delete-menu/{menu_id}
+    Description: Deletes a menu by its ID and sets menu_id to NULL in associated pages.
+    Parameters:
+    - menu_id: The ID of the menu to delete.
+    - token: The authentication token
+    Returns: A message confirming the menu deletion.
+    """
+    # Authenticate and get the current user
+    current_user = get_user_from_token(token)
+    if not current_user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+    # Check if the user has access to the service
+    if not methods.is_service_allowed(user_id=current_user.id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="User does not have access to this service")
+
+    # Verify user permissions
+    if not access_management.check_user_access(user=current_user, allowed_permissions=['manage_menus']):
+        raise HTTPException(status_code=403, detail="User does not have access to this service")
+
+    # Retrieve the menu
+    db_menu = db.query(schemas.Menu).filter(schemas.Menu.id == menu_id).first()
+    if not db_menu:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Menu not found")
+
+    # Check if the current user is the owner of the menu
+    if db_menu.user_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+                            detail="You do not have permission to delete this menu")
+
+    # Update the menu_id to NULL in associated pages
+    db.query(Page).filter(schemas.Page.menu_id == menu_id).update({schemas.Page.menu_id: None}, synchronize_session=False)
+
+    # Delete the menu
+    db.delete(db_menu)
+    db.commit()
+
+    return {"message": "Menu is deleted successfully"}
+
 
 
 @cms_router.get("/api/user/get_user_menu")
